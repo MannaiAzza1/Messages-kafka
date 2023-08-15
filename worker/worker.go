@@ -11,6 +11,8 @@ import (
 
 var refList = map[string]map[string]Comment{}
 
+const n = 6
+
 type Comment struct {
 	Text   string `form:"text" json:"text"`
 	Id     string `form:"id" json:"id"`
@@ -18,11 +20,6 @@ type Comment struct {
 }
 
 func main() {
-
-	//myMap2[cmt.Id] = append(myMap2[cmt.Id], Comment{Text: "azza"})
-	//myMap[cmt.NumInc] = append(myMap[cmt.NumInc], myMap2)
-	////myMap[2] = append(myMap[2], Comment{"azza", "2"})
-	//fmt.Println(myMap)
 	topic := "comments"
 	topic2 := "servers"
 
@@ -33,8 +30,8 @@ func main() {
 
 	// Calling ConsumePartition. It will open one connection per broker
 	// and share it for all partitions that live on it.
-	consumer, err := worker.ConsumePartition(topic2, 0, sarama.OffsetOldest)
-	consumer2, err2 := worker.ConsumePartition(topic, 0, sarama.OffsetOldest)
+	consumer, err := worker.ConsumePartition(topic, 0, sarama.OffsetOldest)
+	consumer2, err2 := worker.ConsumePartition(topic2, 0, sarama.OffsetOldest)
 
 	if err != nil || err2 != nil {
 		panic(err)
@@ -69,6 +66,12 @@ func main() {
 
 				//fmt.Printf("%+v\n", content.Text)
 				msgCount++
+
+				//fmt.Println("tt")
+				//content := Comment{"tt", "5", "189"}
+				//cmtInBytes, _ := json.Marshal(content)
+				//PushCommentToQueue("servers", cmtInBytes)
+
 				fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg.Topic), string(msg.Value))
 
 			case <-sigchan:
@@ -115,8 +118,55 @@ func setRefList(msg Comment) {
 		refList[msg.NumInc][msg.Id] = msg
 
 	}
+	fmt.Println(len(refList[msg.NumInc]))
+	if len(refList[msg.NumInc]) > n/2 {
+		fmt.Println("un message")
+		content := msg
+		cmtInBytes, _ := json.Marshal(content)
+		SendMessageToServers("servers", cmtInBytes)
+		fmt.Println("message sent")
+
+	}
 	fmt.Println(refList)
 
+}
+func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 5
+
+	conn, err := sarama.NewSyncProducer(brokersUrl, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+func SendMessageToServers(topic string, message []byte) error {
+
+	brokersUrl := []string{"127.0.0.1:9092"}
+	producer, err := ConnectProducer(brokersUrl)
+	if err != nil {
+		return err
+	}
+
+	defer producer.Close()
+
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.StringEncoder(message),
+	}
+
+	partition, offset, err := producer.SendMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", topic, partition, offset)
+
+	return nil
 }
 
 //func exist(msg Comment) bool {
