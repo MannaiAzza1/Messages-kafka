@@ -11,7 +11,9 @@ import (
 
 // Comment struct
 type Comment struct {
-	Text string `form:"text" json:"text"`
+	Text   string `form:"text" json:"text"`
+	Id     string `form:"id" json:"id"`
+	NumInc string `form:"num-inc" json:"num-inc"`
 }
 
 func main() {
