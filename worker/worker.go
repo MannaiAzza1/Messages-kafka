@@ -3,15 +3,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Shopify/sarama"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/Shopify/sarama"
 )
 
 var refList = map[string]map[string]Comment{}
 
-const n = 6
+const n = 20
 
 type Comment struct {
 	Text   string `form:"text" json:"text"`
@@ -62,15 +63,8 @@ func main() {
 					}
 
 				}
-				//m := string(msg.Value)
 
-				//fmt.Printf("%+v\n", content.Text)
 				msgCount++
-
-				//fmt.Println("tt")
-				//content := Comment{"tt", "5", "189"}
-				//cmtInBytes, _ := json.Marshal(content)
-				//PushCommentToQueue("servers", cmtInBytes)
 
 				fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg.Topic), string(msg.Value))
 
@@ -82,6 +76,7 @@ func main() {
 			case msg := <-consumer2.Messages():
 
 				fmt.Printf("Topic(%s) | Message(%s) \n", string(msg.Topic), string(msg.Value))
+				fmt.Printf("recieved message from servers")
 			}
 		}
 
