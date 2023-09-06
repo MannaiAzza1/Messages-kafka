@@ -7,12 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	// "strings"
+
 	"github.com/Shopify/sarama"
 )
 
 var refList = map[string]map[string]Comment{}
 
-const n = 20
+const n = 6
 
 type Comment struct {
 	Text   string `form:"text" json:"text"`
@@ -21,7 +23,7 @@ type Comment struct {
 }
 
 func main() {
-	topic := "comments"
+	topic := "shared"
 	topic2 := "servers"
 
 	worker, err := connectConsumer([]string{"127.0.0.1:9092"})
@@ -74,9 +76,11 @@ func main() {
 			case err := <-consumer2.Errors():
 				fmt.Println(err)
 			case msg := <-consumer2.Messages():
+				bytes := []byte(string(msg.Value))
+				var message Comment
+				json.Unmarshal(bytes, &message)
+				fmt.Printf("%s \n", message.Text)
 
-				fmt.Printf("Topic(%s) | Message(%s) \n", string(msg.Topic), string(msg.Value))
-				fmt.Printf("recieved message from servers")
 			}
 		}
 
@@ -114,9 +118,10 @@ func setRefList(msg Comment) {
 
 	}
 	fmt.Println(len(refList[msg.NumInc]))
-	if len(refList[msg.NumInc]) > n/2 {
+	if len(refList[msg.NumInc]) >= n/2 {
 		fmt.Println("un message")
 		content := msg
+		content.Text = "Message envoyée par Serveur A"
 		cmtInBytes, _ := json.Marshal(content)
 		SendMessageToServers("servers", cmtInBytes)
 		fmt.Println("message sent")
