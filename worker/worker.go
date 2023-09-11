@@ -13,6 +13,7 @@ import (
 )
 
 var refList = map[string]map[string]Comment{}
+var sent = false
 
 const n = 6
 
@@ -20,6 +21,11 @@ type Comment struct {
 	Text   string `form:"text" json:"text"`
 	Id     string `form:"id" json:"id"`
 	NumInc string `form:"num-inc" json:"num-inc"`
+}
+type MessageSent struct {
+	Text   string         `form:"text" json:"text"`
+	NumInc string         `form:"num-inc" json:"num-inc"`
+	IdList map[int]string `form:"idList" json:"idList"`
 }
 
 func main() {
@@ -77,9 +83,11 @@ func main() {
 				fmt.Println(err)
 			case msg := <-consumer2.Messages():
 				bytes := []byte(string(msg.Value))
-				var message Comment
+				var message MessageSent
 				json.Unmarshal(bytes, &message)
-				fmt.Printf("%s \n", message.Text)
+				fmt.Println(message.IdList)
+				fmt.Println(message.NumInc)
+				fmt.Println(message.Text)
 
 			}
 		}
@@ -108,27 +116,39 @@ func connectConsumer(brokersUrl []string) (sarama.Consumer, error) {
 	return conn, nil
 }
 func setRefList(msg Comment) {
+	if sent == false {
 
-	_, ok := refList[msg.NumInc]
-	if len(refList) == 0 || true {
-		if !ok {
-			refList[msg.NumInc] = make(map[string]Comment)
+		_, ok := refList[msg.NumInc]
+		if len(refList) == 0 || true {
+			if !ok {
+				refList[msg.NumInc] = make(map[string]Comment)
+			}
+			refList[msg.NumInc][msg.Id] = msg
+
 		}
-		refList[msg.NumInc][msg.Id] = msg
+		if len(refList[msg.NumInc]) >= n/2 {
+			var list = map[int]string{}
+			var i = 0
+
+			for key, element := range refList[msg.NumInc] {
+				fmt.Println("Key:", key, "=>", "Element:", element)
+				list[i] = key
+				i = i + 1
+				fmt.Println(list)
+			}
+
+			var msg_sent = MessageSent{}
+			msg_sent.IdList = list
+			msg_sent.NumInc = msg.NumInc
+			msg_sent.Text = msg.Text
+
+			cmtInBytes, _ := json.Marshal(msg_sent)
+			SendMessageToServers("servers", cmtInBytes)
+			sent = true
+
+		}
 
 	}
-	fmt.Println(len(refList[msg.NumInc]))
-	if len(refList[msg.NumInc]) >= n/2 {
-		fmt.Println("un message")
-		content := msg
-		content.Text = "Message envoyée par Serveur A"
-		cmtInBytes, _ := json.Marshal(content)
-		SendMessageToServers("servers", cmtInBytes)
-		fmt.Println("message sent")
-
-	}
-	fmt.Println(refList)
-
 }
 func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
 

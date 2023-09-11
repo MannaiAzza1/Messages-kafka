@@ -36,13 +36,13 @@ func main() {
 		id = strings.Replace(id, "\r\n", "", -1)
 		fmt.Println("Please write the message Instance")
 		ins, _ := reader.ReadString('\n')
-		ins = strings.Replace(id, "\r\n", "", -1)
+		ins = strings.Replace(ins, "\r\n", "", -1)
 
 		cmt := new(Comment)
 		cmt.Id = id
 		cmt.NumInc = ins
 		cmt.Text = content
-		fmt.Printf("message %s id %s num inc %s", cmt.Id, cmt.NumInc, cmt.Text)
+		fmt.Printf("message-c %s id-m %s num inc %s", cmt.Id, cmt.NumInc, cmt.Text)
 		createComment(*cmt)
 
 	}
