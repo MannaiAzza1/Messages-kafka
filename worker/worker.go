@@ -13,9 +13,13 @@ import (
 )
 
 var refList = map[string]map[string]Comment{}
+var serverList = map[string]map[string]map[int]string{}
 var sent = false
 
+const s = 4
+
 const n = 6
+const serverId = "shared"
 
 type Comment struct {
 	Text   string `form:"text" json:"text"`
@@ -23,14 +27,16 @@ type Comment struct {
 	NumInc string `form:"num-inc" json:"num-inc"`
 }
 type MessageSent struct {
-	Text   string         `form:"text" json:"text"`
-	NumInc string         `form:"num-inc" json:"num-inc"`
-	IdList map[int]string `form:"idList" json:"idList"`
+	Text     string         `form:"text" json:"text"`
+	NumInc   string         `form:"num-inc" json:"num-inc"`
+	IdList   map[int]string `form:"idList" json:"idList"`
+	ServerId string         `form:"serverId" json:"serverId"`
 }
 
 func main() {
 	topic := "shared"
 	topic2 := "servers"
+	topic3 := "clients"
 
 	worker, err := connectConsumer([]string{"127.0.0.1:9092"})
 	if err != nil {
@@ -41,6 +47,7 @@ func main() {
 	// and share it for all partitions that live on it.
 	consumer, err := worker.ConsumePartition(topic, 0, sarama.OffsetOldest)
 	consumer2, err2 := worker.ConsumePartition(topic2, 0, sarama.OffsetOldest)
+	consumer3, err2 := worker.ConsumePartition(topic3, 0, sarama.OffsetOldest)
 
 	if err != nil || err2 != nil {
 		panic(err)
@@ -85,9 +92,22 @@ func main() {
 				bytes := []byte(string(msg.Value))
 				var message MessageSent
 				json.Unmarshal(bytes, &message)
-				fmt.Println(message.IdList)
-				fmt.Println(message.NumInc)
-				fmt.Println(message.Text)
+				setServerList(message)
+
+			case msg3 := <-consumer3.Messages():
+				if msg3.Value != nil {
+					content := Comment{}
+					json.Unmarshal(msg3.Value, &content)
+					if content.Text != "" && content.Id != "" && content.NumInc != "" {
+						setRefList(content)
+
+					}
+
+				}
+
+				msgCount++
+
+				fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg3.Topic), string(msg3.Value))
 
 			}
 		}
@@ -103,6 +123,35 @@ func main() {
 
 }
 
+func setServerList(msg MessageSent) {
+	serverList[msg.ServerId] = make(map[string]map[int]string)
+	serverList[msg.ServerId][msg.NumInc] = make(map[int]string)
+
+	for key, element := range msg.IdList {
+		fmt.Println("Key:", key, "=>", "Element:", element)
+		serverList[msg.ServerId][msg.NumInc][key] = element
+
+	}
+	if getServersNumber(msg) > s/2 {
+
+	}
+	fmt.Println(serverList)
+
+}
+func getServersNumber(msg MessageSent) int {
+	var i = 0
+	for _, mapRef := range serverList {
+		for id, _ := range mapRef {
+			if id == msg.NumInc {
+				i++
+			}
+
+		}
+
+	}
+	return i
+
+}
 func connectConsumer(brokersUrl []string) (sarama.Consumer, error) {
 	config := sarama.NewConfig()
 	config.Consumer.Return.Errors = true
@@ -141,6 +190,7 @@ func setRefList(msg Comment) {
 			msg_sent.IdList = list
 			msg_sent.NumInc = msg.NumInc
 			msg_sent.Text = msg.Text
+			msg_sent.ServerId = serverId
 
 			cmtInBytes, _ := json.Marshal(msg_sent)
 			SendMessageToServers("servers", cmtInBytes)
