@@ -10,7 +10,7 @@ import (
 
 	"github.com/Shopify/sarama"
 )
-
+const topic = "clients"
 // Comment struct
 type Comment struct {
 	Text   string `form:"text" json:"text"`
@@ -93,7 +93,7 @@ func PushCommentToQueue(topic string, message []byte) error {
 func createComment(cmt Comment) {
 
 	cmtInBytes, err := json.Marshal(cmt)
-	PushCommentToQueue("shared", cmtInBytes)
+	PushCommentToQueue(topic, cmtInBytes)
 	if err != nil {
 		fmt.Println("error pushing")
 	}
