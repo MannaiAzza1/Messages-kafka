@@ -13,39 +13,41 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-var refList = map[string]map[string]Comment{}
+var refList = map[string]map[string]Comment{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
 var serverList = map[string]map[string]map[string]string{}
-var sent = false
+var sent = false // variable pour s'assurer que le serveur diffuse son message à tous les autres serveurs qu'une seule fois
 
-const s = 4
+const s = 4 // represente le variable s qui est egale à N/2 :
 
 const n = 6
 const serverId = "shared"
 
 type Comment struct {
+	//structure des messages envoyées par les clients aux serveurs
+	// text : contenu du message num inc : numero d'instance id : Id du message
 	Text   string `form:"text" json:"text"`
 	Id     string `form:"id" json:"id"`
 	NumInc string `form:"num-inc" json:"num-inc"`
 }
-type MessageSent struct {
-	Text     string            `form:"text" json:"text"`
-	NumInc   string            `form:"num-inc" json:"num-inc"`
-	IdList   map[string]string `form:"idList" json:"idList"`
-	ServerId string            `form:"serverId" json:"serverId"`
+type MessageSent struct { //structure des messages envoyées par un serveur à tous les autres serveurs
+	Text     string            `form:"text" json:"text"`         //contenu du message
+	NumInc   string            `form:"num-inc" json:"num-inc"`   // numero d'instance
+	IdList   map[string]string `form:"idList" json:"idList"`     // liste des ids maps des ids des message recus [idMessage:idMessage]
+	ServerId string            `form:"serverId" json:"serverId"` //id du serveur
 }
 
-func main() {
-	topic := "shared"
-	topic2 := "servers"
-	topic3 := "clients"
+func main() { // declaration des sujets kafka sur lequelle on va publier/consommer les messages
 
-	worker, err := connectConsumer([]string{"127.0.0.1:9092"})
+	topic := "shared"   //sujet specifique à ce serveur sur lequel tous les clients peuvent envoyée des messages
+	topic2 := "servers" //sujet pour tous les serveurs
+	topic3 := "clients" // sujets pour les message envoyées à partir d'un client à tous les serveurs
+
+	worker, err := connectConsumer([]string{"127.0.0.1:9092"}) //spécifier url du serveur kafka
 	if err != nil {
 		panic(err)
 	}
 
-	// Calling ConsumePartition. It will open one connection per broker
-	// and share it for all partitions that live on it.
+	// creation des consommateurs pour chaque sujet
 	consumer, err := worker.ConsumePartition(topic, 0, sarama.OffsetOldest)
 	consumer2, err2 := worker.ConsumePartition(topic2, 0, sarama.OffsetOldest)
 	consumer3, err2 := worker.ConsumePartition(topic3, 0, sarama.OffsetOldest)
@@ -53,14 +55,14 @@ func main() {
 	if err != nil || err2 != nil {
 		panic(err)
 
-	}
+	} // test sur les erreurs de démrrage du consommateurs
 	fmt.Println("Consumer started ")
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-	// Count how many message processed
+	// Calculer nombre de messages
 	msgCount := 0
 
-	// Get signal for finish
+	// singaler fin
 	doneCh := make(chan struct{})
 
 	go func() {
@@ -68,12 +70,12 @@ func main() {
 			select {
 			case err := <-consumer.Errors():
 				fmt.Println(err)
-			case msg := <-consumer.Messages():
+			case msg := <-consumer.Messages(): // cas ou le consommtauer recoit un message
 
-				if msg.Value != nil {
+				if msg.Value != nil { // si son valeur est different de null
 					content := Comment{}
-					json.Unmarshal(msg.Value, &content)
-					if content.Text != "" && content.Id != "" && content.NumInc != "" {
+					json.Unmarshal(msg.Value, &content)                                 //transformer en format json
+					if content.Text != "" && content.Id != "" && content.NumInc != "" { //si tous les champs sont pas vides on fait appel à la fonction refList
 						setRefList(content)
 
 					}
@@ -164,27 +166,29 @@ func connectConsumer(brokersUrl []string) (sarama.Consumer, error) {
 
 	return conn, nil
 }
-func setRefList(msg Comment) {
-	if sent == false {
+func setRefList(msg Comment) { //la fonction prend en parametre le message recu par le serveur à partir d'un client
+	if sent == false { // tester si il a déja envoyée un message avant
 
 		_, ok := refList[msg.NumInc]
-		if len(refList) == 0 || true {
-			if !ok {
-				refList[msg.NumInc] = make(map[string]Comment)
+		if len(refList) == 0 || true { // si la liste est vide donc on va ajouter directement le message dans la liste
+			if !ok { // si dans le map il n'existe pas une case avec cet numero d'instance
+				refList[msg.NumInc] = make(map[string]Comment) //intialisation du case
 			}
-			refList[msg.NumInc][msg.Id] = msg
+			refList[msg.NumInc][msg.Id] = msg //on va ajouter aux map groupées par le numero d'instance le message recu
+			//exemple : reflist : [100 :[1:{id:1,numInc:100, text :"message1"}] , 200[5:{id:5,numInc:200,text:"message 5"}]]
 
 		}
-		if len(refList[msg.NumInc]) >= n/2 {
-			var list = map[string]string{}
+		if len(refList[msg.NumInc]) >= n/2 { // si les nombres de messages recu d'un meme numero d'instance est > à n/2 le serveur va diffuser un message à tous les autres serveurs
+			var list = map[string]string{} // prepation de la liste des messages recu par le serveur exemple : [5:5,1:1]
 			var i = 0
 
-			for key, _ := range refList[msg.NumInc] {
+			for key, _ := range refList[msg.NumInc] { //parcourir la liste des message par numero d'instance
 				// fmt.Println("Key:", key, "=>", "Element:", element)
 				list[key] = key
 				i = i + 1
 				// fmt.Println(list)
 			}
+			//intialisation du contenu du message à envoyer
 
 			var msg_sent = MessageSent{}
 			msg_sent.IdList = list
@@ -192,14 +196,14 @@ func setRefList(msg Comment) {
 			msg_sent.Text = msg.Text
 			msg_sent.ServerId = serverId
 
-			cmtInBytes, _ := json.Marshal(msg_sent)
-			SendMessageToServers("servers", cmtInBytes)
-			sent = true
+			cmtInBytes, _ := json.Marshal(msg_sent)     // compresser le message avant de l'envoyer
+			SendMessageToServers("servers", cmtInBytes) // publier le message dans kafka
+			sent = true                                 //changer la valeur du variable à true
 
 		}
 
 	}
-}
+} // cet fonction est pour intialiser les paramteres du serveur en tant que producteur des messages
 func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
 
 	config := sarama.NewConfig()
@@ -214,6 +218,8 @@ func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
 
 	return conn, nil
 }
+
+// fonction d'envoi d'un message à tous les serveurs : elle prend comme paramétre le nom du sujet kafka et le message à envoyer
 func SendMessageToServers(topic string, message []byte) error {
 
 	brokersUrl := []string{"127.0.0.1:9092"}
