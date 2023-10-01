@@ -1,11 +1,11 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"encoding/json" //librarie utilisée pour le marshal/unmarshal des objets
+	"fmt"           // utiliser pour l'affichages des message
 	"os"
 	"os/signal"
-	"reflect"
+	"reflect" // utilisé pour compater si deux maps sont identiques avec la methode deepEquals
 	"syscall"
 
 	// "strings"
