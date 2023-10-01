@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"reflect"
 	"syscall"
 
 	// "strings"
@@ -13,7 +14,7 @@ import (
 )
 
 var refList = map[string]map[string]Comment{}
-var serverList = map[string]map[string]map[int]string{}
+var serverList = map[string]map[string]map[string]string{}
 var sent = false
 
 const s = 4
@@ -27,10 +28,10 @@ type Comment struct {
 	NumInc string `form:"num-inc" json:"num-inc"`
 }
 type MessageSent struct {
-	Text     string         `form:"text" json:"text"`
-	NumInc   string         `form:"num-inc" json:"num-inc"`
-	IdList   map[int]string `form:"idList" json:"idList"`
-	ServerId string         `form:"serverId" json:"serverId"`
+	Text     string            `form:"text" json:"text"`
+	NumInc   string            `form:"num-inc" json:"num-inc"`
+	IdList   map[string]string `form:"idList" json:"idList"`
+	ServerId string            `form:"serverId" json:"serverId"`
 }
 
 func main() {
@@ -107,7 +108,7 @@ func main() {
 
 				msgCount++
 
-				fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg3.Topic), string(msg3.Value))
+				// fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg3.Topic), string(msg3.Value))
 
 			}
 		}
@@ -115,7 +116,7 @@ func main() {
 	}()
 
 	<-doneCh
-	fmt.Println("Processed", msgCount, "messages")
+	// fmt.Println("Processed", msgCount, "messages")
 
 	if err := worker.Close(); err != nil {
 		panic(err)
@@ -124,31 +125,30 @@ func main() {
 }
 
 func setServerList(msg MessageSent) {
-	serverList[msg.ServerId] = make(map[string]map[int]string)
-	serverList[msg.ServerId][msg.NumInc] = make(map[int]string)
 
-	for key, element := range msg.IdList {
-		fmt.Println("Key:", key, "=>", "Element:", element)
-		serverList[msg.ServerId][msg.NumInc][key] = element
+	serverList[msg.ServerId] = make(map[string]map[string]string)
+	serverList[msg.ServerId][msg.NumInc] = msg.IdList
 
-	}
-	if getServersNumber(msg) > s/2 {
+	if getServersNumber(msg) >= s/2 {
+
+		fmt.Println("work")
 
 	}
-	fmt.Println(serverList)
 
 }
 func getServersNumber(msg MessageSent) int {
 	var i = 0
-	for _, mapRef := range serverList {
+	for key, mapRef := range serverList {
 		for id, _ := range mapRef {
-			if id == msg.NumInc {
+			if id == msg.NumInc && reflect.DeepEqual(msg.IdList, serverList[key][id]) == true {
 				i++
+
 			}
 
 		}
 
 	}
+	fmt.Println(i)
 	return i
 
 }
@@ -176,14 +176,14 @@ func setRefList(msg Comment) {
 
 		}
 		if len(refList[msg.NumInc]) >= n/2 {
-			var list = map[int]string{}
+			var list = map[string]string{}
 			var i = 0
 
-			for key, element := range refList[msg.NumInc] {
-				fmt.Println("Key:", key, "=>", "Element:", element)
-				list[i] = key
+			for key, _ := range refList[msg.NumInc] {
+				// fmt.Println("Key:", key, "=>", "Element:", element)
+				list[key] = key
 				i = i + 1
-				fmt.Println(list)
+				// fmt.Println(list)
 			}
 
 			var msg_sent = MessageSent{}
