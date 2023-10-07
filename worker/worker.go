@@ -70,7 +70,7 @@ func main() { // declaration des sujets kafka sur lequelle on va publier/consomm
 			select {
 			case err := <-consumer.Errors():
 				fmt.Println(err)
-			case msg := <-consumer.Messages(): // cas ou le consommtauer recoit un message
+			case msg := <-consumer.Messages(): // cas ou le consommateur recoit un message
 
 				if msg.Value != nil { // si son valeur est different de null
 					content := Comment{}
@@ -91,11 +91,11 @@ func main() { // declaration des sujets kafka sur lequelle on va publier/consomm
 				doneCh <- struct{}{}
 			case err := <-consumer2.Errors():
 				fmt.Println(err)
-			case msg := <-consumer2.Messages():
+			case msg := <-consumer2.Messages(): // si le serveur recoit des message à partir du client
 				bytes := []byte(string(msg.Value))
 				var message MessageSent
 				json.Unmarshal(bytes, &message)
-				setServerList(message)
+				setServerList(message) //fait appel a la methode setServerList
 
 			case msg3 := <-consumer3.Messages():
 				if msg3.Value != nil {
@@ -126,24 +126,25 @@ func main() { // declaration des sujets kafka sur lequelle on va publier/consomm
 
 }
 
-func setServerList(msg MessageSent) {
+func setServerList(msg MessageSent) { // la fonction prend en paramatere le message recu , verifie le nombre
+	// si on atteint un nombre de message > s/2 avec la même numero d'instance , les memes id des message mais d'un nombre s/2 id serveur distincts on fait une traitement
 
-	serverList[msg.ServerId] = make(map[string]map[string]string)
-	serverList[msg.ServerId][msg.NumInc] = msg.IdList
+	serverList[msg.ServerId] = make(map[string]map[string]string) // initalisation du structure du map : exemple du map [server1 : [100:[3:3,1:1,2:2] ]]
+	serverList[msg.ServerId][msg.NumInc] = msg.IdList             //on ajoute le message recu dans la liste
 
-	if getServersNumber(msg) >= s/2 {
+	if getServersNumber(msg) >= s/2 { // si nombre de serveurs > s/2
 
-		fmt.Println("work")
+		fmt.Println("work") // on fait une traitement
 
 	}
 
 }
-func getServersNumber(msg MessageSent) int {
+func getServersNumber(msg MessageSent) int { // va nous retourner le nombre de serveur a partir de lequelle on a recu une liste des message identiques avec le meme numero d'instance
 	var i = 0
-	for key, mapRef := range serverList {
+	for key, mapRef := range serverList { // parcourir la liste des message recu par le serveur
 		for id, _ := range mapRef {
-			if id == msg.NumInc && reflect.DeepEqual(msg.IdList, serverList[key][id]) == true {
-				i++
+			if id == msg.NumInc && reflect.DeepEqual(msg.IdList, serverList[key][id]) == true { // comaprer les deux maps
+				i++ // si ils sont identiques on augemente par 1
 
 			}
 
@@ -154,7 +155,7 @@ func getServersNumber(msg MessageSent) int {
 	return i
 
 }
-func connectConsumer(brokersUrl []string) (sarama.Consumer, error) {
+func connectConsumer(brokersUrl []string) (sarama.Consumer, error) { // intialisation du consommateur kafka
 	config := sarama.NewConfig()
 	config.Consumer.Return.Errors = true
 

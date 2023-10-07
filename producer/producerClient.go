@@ -10,7 +10,9 @@ import (
 
 	"github.com/Shopify/sarama"
 )
+
 const topic = "clients"
+
 // Comment struct
 type Comment struct {
 	Text   string `form:"text" json:"text"`
@@ -23,7 +25,7 @@ func main() {
 	fmt.Println("Producer Started")
 	fmt.Println("---------------------")
 
-	for {
+	for { // boucle pour l'affichage et la lecture des valeurs saisie à travers le console
 		fmt.Println("Please write the message content")
 		content, _ := reader.ReadString('\n')
 
@@ -38,12 +40,12 @@ func main() {
 		ins, _ := reader.ReadString('\n')
 		ins = strings.Replace(ins, "\r\n", "", -1)
 
-		cmt := new(Comment)
+		cmt := new(Comment) // prepartion du message a travers les champs remplit en console
 		cmt.Id = id
 		cmt.NumInc = ins
 		cmt.Text = content
 		fmt.Printf("message-c %s id-m %s num inc %s", cmt.Id, cmt.NumInc, cmt.Text)
-		createComment(*cmt)
+		createComment(*cmt) // creation du message
 
 	}
 
@@ -66,8 +68,8 @@ func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
 
 func PushCommentToQueue(topic string, message []byte) error {
 
-	brokersUrl := []string{"127.0.0.1:9092"}
-	producer, err := ConnectProducer(brokersUrl)
+	brokersUrl := []string{"127.0.0.1:9092"}     // intialisation de l'url du serveur kafka
+	producer, err := ConnectProducer(brokersUrl) // intialisation du producteur kafka
 	if err != nil {
 		return err
 	}
@@ -77,7 +79,7 @@ func PushCommentToQueue(topic string, message []byte) error {
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Value: sarama.StringEncoder(message),
-	}
+	} // parameter le message à envoyer ainsi le sujet aux quel on va publier le message
 
 	partition, offset, err := producer.SendMessage(msg)
 	if err != nil {
@@ -93,7 +95,7 @@ func PushCommentToQueue(topic string, message []byte) error {
 func createComment(cmt Comment) {
 
 	cmtInBytes, err := json.Marshal(cmt)
-	PushCommentToQueue(topic, cmtInBytes)
+	PushCommentToQueue(topic, cmtInBytes) // publier le message sur le sujet kafka
 	if err != nil {
 		fmt.Println("error pushing")
 	}
