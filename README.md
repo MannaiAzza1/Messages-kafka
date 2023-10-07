@@ -4,7 +4,7 @@ Ce projet est basé sur Go et utilise Docker pour l'exécution. Avant de commenc
 
 ## Prérequis
 
-- Go doit être installé et configuré : [Installer Go](https://golang.org/doc/install)
+- Go doit être installé et configuré : [Installer Go](https://golang.org/doc/install) go version go1.20.5 windows/amd64
 - Docker doit être installé : [Installer Docker](https://docs.docker.com/get-docker/)
 - Docker Compose doit être installé : [Installer Docker Compose](https://docs.docker.com/compose/install/)
 
