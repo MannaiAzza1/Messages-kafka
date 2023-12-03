@@ -4,158 +4,57 @@ import (
 	"encoding/json" //librarie utilisée pour le marshal/unmarshal des objets
 	"fmt"           // utiliser pour l'affichages des message
 	"os"
-	"os/signal"
 	"reflect" // utilisé pour compater si deux maps sont identiques avec la methode deepEquals
-	"syscall"
-
 	// "strings"
 
 	"github.com/Shopify/sarama"
 )
 
-var refList = map[string]map[string]Comment{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
-var serverList = map[string]map[string]map[string]string{}
-var sent = false // variable pour s'assurer que le serveur diffuse son message à tous les autres serveurs qu'une seule fois
-
+var refList = map[string]map[string]StoreReqMsg{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
+var serversList = map[string]map[string]map[string]string{}
+var sentFlag = false // variable pour s'assurer que le serveur diffuse son message à tous les autres serveurs qu'une seule fois
+const UrlKafka = "127.0.0.1:9092"
 const s = 4 // represente le variable s qui est egale à N/2 :
 
 const n = 6
-const serverId = "shared"
+const serverId = "server1"
 
-type Comment struct {
-	//structure des messages envoyées par les clients aux serveurs
-	// text : contenu du message num inc : numero d'instance id : Id du message
-	Text   string `form:"text" json:"text"`
-	Id     string `form:"id" json:"id"`
+// cet fonction est pour intialiser les paramteres du serveur en tant que producteur des messages
+func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) {
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 5
+
+	conn, err := sarama.NewSyncProducer(brokersUrl, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+type StoreReqMsg struct {
+	Data   string `form:"text" json:"text"`
+	CID    string `form:"id" json:"id"`
 	NumInc string `form:"num-inc" json:"num-inc"`
 }
-type MessageSent struct { //structure des messages envoyées par un serveur à tous les autres serveurs
-	Text     string            `form:"text" json:"text"`         //contenu du message
-	NumInc   string            `form:"num-inc" json:"num-inc"`   // numero d'instance
-	IdList   map[string]string `form:"idList" json:"idList"`     // liste des ids maps des ids des message recus [idMessage:idMessage]
-	ServerId string            `form:"serverId" json:"serverId"` //id du serveur
+type AckStoreMsg struct {
+	Text     string            `form:"text" json:"text"`
+	SrNb     string            `form:"num-inc" json:"num-inc"`
+	CinitID  string            `form:"cinitID" json:"cinitID"`
+	IdList   map[string]string `form:"idList" json:"idList"`
+	SID      string            `form:"serverId" json:"serverId"`
+	SigCinit string            `form:"sigCinit" json:"sigCinit"`
+	SigServ  string            `form:"sigServ" json:"sigServ"`
 }
 
-func main() { // declaration des sujets kafka sur lequelle on va publier/consommer les messages
-
-	topic := "shared"   //sujet specifique à ce serveur sur lequel tous les clients peuvent envoyée des messages
-	topic2 := "servers" //sujet pour tous les serveurs
-	topic3 := "clients" // sujets pour les message envoyées à partir d'un client à tous les serveurs
-
-	worker, err := connectConsumer([]string{"127.0.0.1:9092"}) //spécifier url du serveur kafka
-	if err != nil {
-		panic(err)
-	}
-
-	// creation des consommateurs pour chaque sujet
-	consumer, err := worker.ConsumePartition(topic, 0, sarama.OffsetOldest)
-	consumer2, err2 := worker.ConsumePartition(topic2, 0, sarama.OffsetOldest)
-	consumer3, err2 := worker.ConsumePartition(topic3, 0, sarama.OffsetOldest)
-
-	if err != nil || err2 != nil {
-		panic(err)
-
-	} // test sur les erreurs de démrrage du consommateurs
-	fmt.Println("Consumer started ")
-	sigchan := make(chan os.Signal, 1)
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-	// Calculer nombre de messages
-	msgCount := 0
-
-	// singaler fin
-	doneCh := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case err := <-consumer.Errors():
-				fmt.Println(err)
-			case msg := <-consumer.Messages(): // cas ou le consommateur recoit un message
-
-				if msg.Value != nil { // si son valeur est different de null
-					content := Comment{}
-					json.Unmarshal(msg.Value, &content)                                 //transformer en format json
-					if content.Text != "" && content.Id != "" && content.NumInc != "" { //si tous les champs sont pas vides on fait appel à la fonction refList
-						setRefList(content)
-
-					}
-
-				}
-
-				msgCount++
-
-				fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg.Topic), string(msg.Value))
-
-			case <-sigchan:
-				fmt.Println("Interrupt is detected")
-				doneCh <- struct{}{}
-			case err := <-consumer2.Errors():
-				fmt.Println(err)
-			case msg := <-consumer2.Messages(): // si le serveur recoit des message à partir du client
-				bytes := []byte(string(msg.Value))
-				var message MessageSent
-				json.Unmarshal(bytes, &message)
-				setServerList(message) //fait appel a la methode setServerList
-
-			case msg3 := <-consumer3.Messages():
-				if msg3.Value != nil {
-					content := Comment{}
-					json.Unmarshal(msg3.Value, &content)
-					if content.Text != "" && content.Id != "" && content.NumInc != "" {
-						setRefList(content)
-
-					}
-
-				}
-
-				msgCount++
-
-				// fmt.Printf("Received message Count %d: | Topic(%s) | Message(%s) \n", msgCount, string(msg3.Topic), string(msg3.Value))
-
-			}
-		}
-
-	}()
-
-	<-doneCh
-	// fmt.Println("Processed", msgCount, "messages")
-
-	if err := worker.Close(); err != nil {
-		panic(err)
-	}
+func main() {
+	initializekafkaServer()
 
 }
-
-func setServerList(msg MessageSent) { // la fonction prend en paramatere le message recu , verifie le nombre
-	// si on atteint un nombre de message > s/2 avec la même numero d'instance , les memes id des message mais d'un nombre s/2 id serveur distincts on fait une traitement
-
-	serverList[msg.ServerId] = make(map[string]map[string]string) // initalisation du structure du map : exemple du map [server1 : [100:[3:3,1:1,2:2] ]]
-	serverList[msg.ServerId][msg.NumInc] = msg.IdList             //on ajoute le message recu dans la liste
-
-	if getServersNumber(msg) >= s/2 { // si nombre de serveurs > s/2
-
-		fmt.Println("work") // on fait une traitement
-
-	}
-
-}
-func getServersNumber(msg MessageSent) int { // va nous retourner le nombre de serveur a partir de lequelle on a recu une liste des message identiques avec le meme numero d'instance
-	var i = 0
-	for key, mapRef := range serverList { // parcourir la liste des message recu par le serveur
-		for id, _ := range mapRef {
-			if id == msg.NumInc && reflect.DeepEqual(msg.IdList, serverList[key][id]) == true { // comaprer les deux maps
-				i++ // si ils sont identiques on augemente par 1
-
-			}
-
-		}
-
-	}
-	fmt.Println(i)
-	return i
-
-}
-func connectConsumer(brokersUrl []string) (sarama.Consumer, error) { // intialisation du consommateur kafka
+func initializeListenerForMessages(brokersUrl []string) (sarama.Consumer, error) {
 	config := sarama.NewConfig()
 	config.Consumer.Return.Errors = true
 
@@ -167,15 +66,126 @@ func connectConsumer(brokersUrl []string) (sarama.Consumer, error) { // intialis
 
 	return conn, nil
 }
-func setRefList(msg Comment) { //la fonction prend en parametre le message recu par le serveur à partir d'un client
-	if sent == false { // tester si il a déja envoyée un message avant
+
+func initializekafkaServer() {
+	toServer := serverId            //sujet specifique à ce serveur sur lequel tous les clients peuvent envoyée des messages
+	serverToAllServers := "servers" //sujet pour tous les serveurs
+	clientToAllServers := "clients" // sujets pour les message envoyées à partir d'un client à tous les serveurs
+
+	worker, err := initializeListenerForMessages([]string{UrlKafka}) //spécifier url du serveur kafka
+	if err != nil {
+		panic(err)
+	}
+
+	// creation des consommateurs pour chaque sujet
+	toServerConsumer, err := worker.ConsumePartition(toServer, 0, sarama.OffsetOldest)
+	serverToAllServersConsumer, err := worker.ConsumePartition(serverToAllServers, 0, sarama.OffsetOldest)
+	clientToAllServersConsumer, err := worker.ConsumePartition(clientToAllServers, 0, sarama.OffsetOldest)
+
+	if err != nil {
+		panic(err)
+
+	} // test sur les erreurs de démrrage du consommateurs
+	fmt.Println("Consumer started ")
+	handleRecieveMessages(toServerConsumer, serverToAllServersConsumer, clientToAllServersConsumer, worker)
+}
+
+func handleRecieveMessages(toServerConsumer sarama.PartitionConsumer, serverToAllServersConsumer sarama.PartitionConsumer, clientToAllServersConsumer sarama.PartitionConsumer, worker sarama.Consumer) {
+	sigchan := make(chan os.Signal, 1)
+
+	// singaler fin
+	doneCh := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case err := <-toServerConsumer.Errors():
+				fmt.Println(err)
+			case receivedMessageToServer := <-toServerConsumer.Messages(): // cas ou le consommateur recoit un message
+
+				if receivedMessageToServer.Value != nil { // si son valeur est different de null
+					content := StoreReqMsg{}
+					json.Unmarshal(receivedMessageToServer.Value, &content)              //transformer en format json
+					if content.Data != "" && content.CID != "" && content.NumInc != "" { //si tous les champs sont pas vides on fait appel à la fonction refList
+						HandleStoreReqMsg(content)
+						fmt.Printf("Received message specific to this server:  Topic(%s) | Message(%s) \n", string(receivedMessageToServer.Topic), string(receivedMessageToServer.Value))
+
+					}
+
+				}
+
+			case receivedMessage := <-serverToAllServersConsumer.Messages(): // si le serveur recoit des message à partir du client
+				bytes := []byte(string(receivedMessage.Value))
+				var message AckStoreMsg
+				fmt.Printf("Received message specific to all servers:  Topic(%s) | Message(%s) \n", string(receivedMessage.Topic), string(receivedMessage.Value))
+				json.Unmarshal(bytes, &message)
+				HandleAckStoreMsg(message) //fait appel a la methode setServerList
+
+			case receivedMessageFromClient := <-clientToAllServersConsumer.Messages():
+				if receivedMessageFromClient.Value != nil {
+					content := StoreReqMsg{}
+					fmt.Printf("Received message specific to all servers from client:  Topic(%s) | Message(%s) \n", string(receivedMessageFromClient.Topic), string(receivedMessageFromClient.Value))
+					json.Unmarshal(receivedMessageFromClient.Value, &content)
+					if content.Data != "" && content.CID != "" && content.NumInc != "" {
+						HandleStoreReqMsg(content)
+
+					}
+
+				}
+			case <-sigchan:
+				fmt.Println("Interrupt is detected")
+				doneCh <- struct{}{}
+			case err := <-serverToAllServersConsumer.Errors():
+				fmt.Println(err)
+
+			}
+		}
+
+	}()
+
+	<-doneCh
+	if err := worker.Close(); err != nil {
+		panic(err)
+	}
+
+}
+
+func HandleAckStoreMsg(msg AckStoreMsg) {
+
+	serversList[msg.SID] = make(map[string]map[string]string)
+
+	if getServersNumber(msg) >= s/2 {
+
+		fmt.Println("work")
+
+	}
+
+}
+func getServersNumber(msg AckStoreMsg) int {
+	var i = 0
+	for key, mapRef := range serversList {
+		for id, _ := range mapRef {
+			if id == msg.SrNb && reflect.DeepEqual(msg.IdList, serversList[key][id]) == true {
+				i++
+
+			}
+
+		}
+
+	}
+	return i
+
+}
+
+func HandleStoreReqMsg(msg StoreReqMsg) { //la fonction prend en parametre le message recu par le serveur à partir d'un client
+	if sentFlag == false { // tester si il a déja envoyée un message avant
 
 		_, ok := refList[msg.NumInc]
 		if len(refList) == 0 || true { // si la liste est vide donc on va ajouter directement le message dans la liste
 			if !ok { // si dans le map il n'existe pas une case avec cet numero d'instance
-				refList[msg.NumInc] = make(map[string]Comment) //intialisation du case
+				refList[msg.NumInc] = make(map[string]StoreReqMsg) //intialisation du case
 			}
-			refList[msg.NumInc][msg.Id] = msg //on va ajouter aux map groupées par le numero d'instance le message recu
+			refList[msg.NumInc][msg.CID] = msg //on va ajouter aux map groupées par le numero d'instance le message recu
 			//exemple : reflist : [100 :[1:{id:1,numInc:100, text :"message1"}] , 200[5:{id:5,numInc:200,text:"message 5"}]]
 
 		}
@@ -191,40 +201,26 @@ func setRefList(msg Comment) { //la fonction prend en parametre le message recu 
 			}
 			//intialisation du contenu du message à envoyer
 
-			var msg_sent = MessageSent{}
-			msg_sent.IdList = list
-			msg_sent.NumInc = msg.NumInc
-			msg_sent.Text = msg.Text
-			msg_sent.ServerId = serverId
+			var messageToSend = AckStoreMsg{}
+			messageToSend.IdList = list
+			messageToSend.SrNb = msg.NumInc
+			messageToSend.Text = msg.Data
+			messageToSend.SID = serverId
 
-			cmtInBytes, _ := json.Marshal(msg_sent)     // compresser le message avant de l'envoyer
-			SendMessageToServers("servers", cmtInBytes) // publier le message dans kafka
-			sent = true                                 //changer la valeur du variable à true
+			cmtInBytes, _ := json.Marshal(messageToSend) // compresser le message avant de l'envoyer
+			SendToAllServers("servers", cmtInBytes)      // publier le message dans kafka
+			sentFlag = true                              //changer la valeur du variable à true
 
 		}
 
 	}
-} // cet fonction est pour intialiser les paramteres du serveur en tant que producteur des messages
-func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
-
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	config.Producer.Retry.Max = 5
-
-	conn, err := sarama.NewSyncProducer(brokersUrl, config)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
 }
 
 // fonction d'envoi d'un message à tous les serveurs : elle prend comme paramétre le nom du sujet kafka et le message à envoyer
-func SendMessageToServers(topic string, message []byte) error {
+func SendToAllServers(topic string, message []byte) error {
 
-	brokersUrl := []string{"127.0.0.1:9092"}
-	producer, err := ConnectProducer(brokersUrl)
+	brokersUrl := []string{UrlKafka}
+	producer, err := initializeSenderForMessages(brokersUrl)
 	if err != nil {
 		return err
 	}
@@ -245,13 +241,3 @@ func SendMessageToServers(topic string, message []byte) error {
 
 	return nil
 }
-
-//func exist(msg Comment) bool {
-//	val, ok := refList[msg.NumInc]
-//	if ok {
-//		_, okMsg := refList[msg.NumInc]
-//		return okMsg
-//
-//	}
-//	return false
-//}

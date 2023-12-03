@@ -13,14 +13,20 @@ import (
 
 const topic = "clients"
 
-// Comment struct
-type Comment struct {
-	Text   string `form:"text" json:"text"`
-	Id     string `form:"id" json:"id"`
-	NumInc string `form:"num-inc" json:"num-inc"`
+type StoreReqMsg struct {
+	Data string `form:"text" json:"text"`
+	CID  string `form:"id" json:"id"`
+	SrNb string `form:"num-inc" json:"num-inc"`
 }
 
+const UrlKafka = "127.0.0.1:9092"
+
 func main() {
+	ReadAndCreateCommentFromConsole()
+
+}
+
+func ReadAndCreateCommentFromConsole() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Producer Started")
 	fmt.Println("---------------------")
@@ -40,18 +46,18 @@ func main() {
 		ins, _ := reader.ReadString('\n')
 		ins = strings.Replace(ins, "\r\n", "", -1)
 
-		cmt := new(Comment) // prepartion du message a travers les champs remplit en console
-		cmt.Id = id
-		cmt.NumInc = ins
-		cmt.Text = content
-		fmt.Printf("message-c %s id-m %s num inc %s", cmt.Id, cmt.NumInc, cmt.Text)
-		createComment(*cmt) // creation du message
+		MessageToSend := new(StoreReqMsg) // prepartion du message a travers les champs remplit en console
+		MessageToSend.CID = id
+		MessageToSend.SrNb = ins
+		MessageToSend.Data = content
+		fmt.Printf("message-c %s id-m %s num inc %s", MessageToSend.CID, MessageToSend.SrNb, MessageToSend.Data)
+		createAndSendStoreReqMessage(*MessageToSend) // creation du message
 
 	}
 
 }
 
-func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
+func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) { // Paramétrage du serveur Kafka
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -64,12 +70,12 @@ func ConnectProducer(brokersUrl []string) (sarama.SyncProducer, error) {
 	}
 
 	return conn, nil
-}
+} 
 
-func PushCommentToQueue(topic string, message []byte) error {
+func SendToAllServers(topic string, message []byte) error {
 
-	brokersUrl := []string{"127.0.0.1:9092"}     // intialisation de l'url du serveur kafka
-	producer, err := ConnectProducer(brokersUrl) // intialisation du producteur kafka
+	brokersUrl := []string{UrlKafka}                         // intialisation de l'url du serveur kafka
+	producer, err := initializeSenderForMessages(brokersUrl) // intialisation du  parametre kafka pour l'envoi du message
 	if err != nil {
 		return err
 	}
@@ -79,9 +85,9 @@ func PushCommentToQueue(topic string, message []byte) error {
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Value: sarama.StringEncoder(message),
-	} // parameter le message à envoyer ainsi le sujet aux quel on va publier le message
+	} // parameter le message à envoyer : on specifier la valeur du message ainsi que le topic (l'ID du serveur) en utilisant la bibliotheque Sarama
 
-	partition, offset, err := producer.SendMessage(msg)
+	partition, offset, err := producer.SendMessage(msg) // envoyer le message
 	if err != nil {
 		return err
 	}
@@ -92,14 +98,13 @@ func PushCommentToQueue(topic string, message []byte) error {
 }
 
 // createComment handler
-func createComment(cmt Comment) {
+func createAndSendStoreReqMessage(cmt StoreReqMsg) {
 
-	cmtInBytes, err := json.Marshal(cmt)
-	PushCommentToQueue(topic, cmtInBytes) // publier le message sur le sujet kafka
+	cmtInBytes, err := json.Marshal(cmt) // seraliser le message en json( nécessaire pour l'envoi) 
+	SendToAllServers(topic, cmtInBytes) // Appel à la fonction d'envoi
 	if err != nil {
 		fmt.Println("error pushing")
-	}
+	} // en cas d'erreur
 
-	// Return Comment in JSON format
 
 }
