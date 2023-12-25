@@ -14,9 +14,11 @@ import (
 const topic = "clients"
 
 type StoreReqMsg struct {
-	Data string `form:"text" json:"text"`
-	CID  string `form:"id" json:"id"`
-	SrNb string `form:"num-inc" json:"num-inc"`
+	Data         string `form:"text" json:"text"`
+	CID          string `form:"id" json:"id"`
+	SrNb         string `form:"num-inc" json:"num-inc"`
+	HighPriority bool   `form:"high_priority" json:"high_priority"`
+	SigC         string `form:"sigc" json:"sigc"`
 }
 
 const UrlKafka = "127.0.0.1:9092"
@@ -45,11 +47,19 @@ func ReadAndCreateCommentFromConsole() {
 		fmt.Println("Please write the message Instance")
 		ins, _ := reader.ReadString('\n')
 		ins = strings.Replace(ins, "\r\n", "", -1)
-
+		fmt.Println("Please write the message priority (true/false)")
+		priority, _ := reader.ReadString('\n')
+		priority = strings.Replace(priority, "\r\n", "", -1)
+		fmt.Println(priority)
 		MessageToSend := new(StoreReqMsg) // prepartion du message a travers les champs remplit en console
 		MessageToSend.CID = id
 		MessageToSend.SrNb = ins
 		MessageToSend.Data = content
+		if priority == "true" {
+			MessageToSend.HighPriority = true
+		} else {
+			MessageToSend.HighPriority = false
+		}
 		fmt.Printf("message-c %s id-m %s num inc %s", MessageToSend.CID, MessageToSend.SrNb, MessageToSend.Data)
 		createAndSendStoreReqMessage(*MessageToSend) // creation du message
 
@@ -70,7 +80,7 @@ func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, erro
 	}
 
 	return conn, nil
-} 
+}
 
 func SendToAllServers(topic string, message []byte) error {
 
@@ -100,11 +110,10 @@ func SendToAllServers(topic string, message []byte) error {
 // createComment handler
 func createAndSendStoreReqMessage(cmt StoreReqMsg) {
 
-	cmtInBytes, err := json.Marshal(cmt) // seraliser le message en json( nécessaire pour l'envoi) 
-	SendToAllServers(topic, cmtInBytes) // Appel à la fonction d'envoi
+	cmtInBytes, err := json.Marshal(cmt) // seraliser le message en json( nécessaire pour l'envoi)
+	SendToAllServers(topic, cmtInBytes)  // Appel à la fonction d'envoi
 	if err != nil {
 		fmt.Println("error pushing")
 	} // en cas d'erreur
-
 
 }
