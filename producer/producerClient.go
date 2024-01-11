@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-
 	"os"
 	"strings"
-
 	"github.com/Shopify/sarama"
 )
 
-const topic = "clients"
+const topic = "clients" //definir le nom du topic kafka
 
 type StoreReqMsg struct {
 	Data         string `form:"text" json:"text"`
@@ -21,11 +19,10 @@ type StoreReqMsg struct {
 	SigC         string `form:"sigc" json:"sigc"`
 }
 
-const UrlKafka = "127.0.0.1:9092"
+const UrlKafka = "127.0.0.1:9092" // definir l'url du serveur kafka 
 
 func main() {
 	ReadAndCreateCommentFromConsole()
-
 }
 
 func ReadAndCreateCommentFromConsole() {
@@ -95,7 +92,7 @@ func SendToAllServers(topic string, message []byte) error {
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Value: sarama.StringEncoder(message),
-	} // parameter le message à envoyer : on specifier la valeur du message ainsi que le topic (l'ID du serveur) en utilisant la bibliotheque Sarama
+	} // parameter le message à envoyer : on specifie la valeur du message ainsi que le topic (l'ID du serveur) en utilisant la bibliotheque Sarama
 
 	partition, offset, err := producer.SendMessage(msg) // envoyer le message
 	if err != nil {

@@ -4,19 +4,19 @@ import (
 	"encoding/json" //librarie utilisée pour le marshal/unmarshal des objets
 	"fmt"           // utiliser pour l'affichages des message
 	"os"
-	"reflect" // utilisé pour compater si deux maps sont identiques avec la methode deepEquals
+	"reflect" // utilisé pour comparer si deux maps sont identiques avec la methode deepEquals
 	// "strings"
 
 	"github.com/Shopify/sarama"
 )
 
 var messagesReferenceList = map[string]map[string]AckStoreMsg{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
-var serversList = map[string]map[string]map[string]string{}
+var serversList = map[string]map[string]map[string]string{} /// la liste des serveurs 
 var sentFlag = false // variable pour s'assurer que le serveur diffuse son message à tous les autres serveurs qu'une seule fois
-const UrlKafka = "127.0.0.1:9092"
+const UrlKafka = "127.0.0.1:9092" // l'url du serveur kafka
 const s = 2 // represente le variable s qui est egale à N/2 :
 var storeResMessagesList = map[string]map[int]StoreReqMsg{}
-var topicsClients = map[string]string{}
+var topicsClients = map[string]string{}//liste des topics pour les clients
 var message = make(map[int]AckStoreMsg)
 
 const t = 2
@@ -47,7 +47,7 @@ type AckStoreMsg struct {
 	SigServ  string            `form:"sigServ" json:"sigServ"`
 }
 
-// cet fonction est pour intialiser les paramteres du serveur en tant que producteur des messages
+// cette fonction est pour intialiser les paramteres du serveur en tant que producteur des messages
 func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) {
 
 	config := sarama.NewConfig()
@@ -98,7 +98,7 @@ func initializekafkaServer() {
 	if err != nil {
 		panic(err)
 
-	} // test sur les erreurs de démrrage du consommateurs
+	} // test sur les erreurs de démarrage des consommateurs
 	fmt.Println("Consumer started ")
 	handleRecieveMessages(toServerConsumer, serverToAllServersConsumer, clientToAllServersConsumer, worker)
 }
