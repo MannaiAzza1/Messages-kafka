@@ -4,27 +4,28 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/Shopify/sarama"
 	"os"
 	"strings"
-	"github.com/Shopify/sarama"
 )
 
 const topic = "clients" //definir le nom du topic kafka
 
-type StoreReqMsg struct {
-	Data         string `form:"text" json:"text"`
-	CID          string `form:"id" json:"id"`
-	SrNb         string `form:"num-inc" json:"num-inc"`
-	HighPriority bool   `form:"high_priority" json:"high_priority"`
-	SigC         string `form:"sigc" json:"sigc"`
+type StoreReqMsg struct { //envoyé par un client à tous les serveurs
+	Data         string `form:"text" json:"text"`                   //contenu utile chaîne de caractères arbitraire
+	CID          string `form:"id" json:"id"`                       //  numéro d’instance chiffre entre 1 et L (c’est l’ID du client expéditeur)
+	SrNb         string `form:"num-inc" json:"num-inc"`             //chiffre arbitraire, distinct pour chaque StoreReq
+	HighPriority bool   `form:"high_priority" json:"high_priority"` // flag  false par défaut, true sinon
+	SigC         string `form:"sigc" json:"sigc"`                   // signature du client
 }
 
-const UrlKafka = "127.0.0.1:9092" // definir l'url du serveur kafka 
-
+const UrlKafka = "127.0.0.1:9092" //  l'url du serveur kafka
+// fonction main
 func main() {
 	ReadAndCreateCommentFromConsole()
 }
 
+// fonction pour lire les variables et ecrire sur le console
 func ReadAndCreateCommentFromConsole() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Producer Started")
@@ -39,15 +40,14 @@ func ReadAndCreateCommentFromConsole() {
 		// convert CRLF to LF
 
 		fmt.Println("Please write the message id")
-		id, _ := reader.ReadString('\n')
+		id, _ := reader.ReadString('\n') //lire l'id du console
 		id = strings.Replace(id, "\r\n", "", -1)
 		fmt.Println("Please write the message Instance")
-		ins, _ := reader.ReadString('\n')
+		ins, _ := reader.ReadString('\n') //lire le data du console
 		ins = strings.Replace(ins, "\r\n", "", -1)
 		fmt.Println("Please write the message priority (true/false)")
-		priority, _ := reader.ReadString('\n')
+		priority, _ := reader.ReadString('\n') //lire la priorité du console
 		priority = strings.Replace(priority, "\r\n", "", -1)
-		fmt.Println(priority)
 		MessageToSend := new(StoreReqMsg) // prepartion du message a travers les champs remplit en console
 		MessageToSend.CID = id
 		MessageToSend.SrNb = ins
@@ -58,14 +58,16 @@ func ReadAndCreateCommentFromConsole() {
 			MessageToSend.HighPriority = false
 		}
 		fmt.Printf("message-c %s id-m %s num inc %s", MessageToSend.CID, MessageToSend.SrNb, MessageToSend.Data)
-		createAndSendStoreReqMessage(*MessageToSend) // creation du message
+		createAndSendStoreReqMessage(*MessageToSend) // creation et envoi du message
 
 	}
 
 }
 
-func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) { // Paramétrage du serveur Kafka
+// fonction pour intialiser les paramteres du serveur en tant que producteur des messages(envoyer des messages)
 
+func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) {
+	// Paramétrage du serveur Kafka
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
@@ -79,6 +81,7 @@ func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, erro
 	return conn, nil
 }
 
+// envoie msg à tous les serveurs
 func SendToAllServers(topic string, message []byte) error {
 
 	brokersUrl := []string{UrlKafka}                         // intialisation de l'url du serveur kafka
@@ -104,10 +107,10 @@ func SendToAllServers(topic string, message []byte) error {
 	return nil
 }
 
-// createComment handler
-func createAndSendStoreReqMessage(cmt StoreReqMsg) {
+// fonction pour seraliser le message et l'envoyer à tous les serveurs
+func createAndSendStoreReqMessage(msg StoreReqMsg) {
 
-	cmtInBytes, err := json.Marshal(cmt) // seraliser le message en json( nécessaire pour l'envoi)
+	cmtInBytes, err := json.Marshal(msg) // seraliser le message en json( nécessaire pour l'envoi)
 	SendToAllServers(topic, cmtInBytes)  // Appel à la fonction d'envoi
 	if err != nil {
 		fmt.Println("error pushing")
