@@ -93,12 +93,14 @@ une fonction qui permet d'initialiser les paramètres du serveur Kafka, tels que
 Une fonction utilisé pour écouter et gérer les différents messages reçus, que ce soit ceux du client vers le serveur ou entre serveurs.
 C'est tout ! Vous avez maintenant exécuté avec succès ce projet Go avec Docker. N'hésitez pas à ajouter d'autres instructions ou informations pertinentes à ce README en fonction des besoins de votre projet.
 ### 5. SendToClient
-envoie un message kafka au client n° cID
+qui prend en paramétres le message à envoyer et l'id du client et envoie un message kafka au client n° cID
 ### 6.SendToAllServers
-envoie un message kakfka à tous les serveurs
+qui prend en paramétres le message et envoie ce message kakfka à tous les serveurs
 ### 7.CreateStoreCertif
+prend en paramétres la liste des messages de type AckStoreMsg recu au present.
 en gros cette fonction vérifie que tous les messages ont le même data, puis output la concaténation des sigServ
 ### 8.checkForMsgId
+qui prend en paramtres le message de type storeReqMsg à verifier et la liste des messages recu.
 Cette fonction sert à vérifier si l'identifiant du message reçu existe déjà ou non.
 ### 9.HandleStoreReqMsg
 fonction exécutée par un serveur lorsqu’il reçoit un message de type StoreReqMsg 
