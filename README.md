@@ -29,8 +29,10 @@ Suivez ces étapes pour exécuter ce projet :
 
 ## Serveurs : Fichier Pour lancer le Serveurs.
 Le serveur est configuré avec les paramètres suivants :
-Serveur ID : server1
-Nombre de Serveurs (N) : 6 
+Serveur ID qui represente l'ID unique du serveur   : server1
+
+Dans notre exemple de code, nous avons utilisé une valeur de 6 pour représenter le nombre total de serveurs (N) .
+
 2. **Démarrage du serveur :**
 
    - Ouvrez un nouveau terminal ou un nouvel onglet.
@@ -43,7 +45,7 @@ Nombre de Serveurs (N) : 6
      cd worker
      go run worker.go
      ```
-## Clients : On a 2 Types de clients
+## Clients : On a 1 Type de clients
 
 ### 1. Client basé sur la console(Client Léger) (producerClient.go)
 
@@ -61,40 +63,50 @@ Ce type de producteur interagit avec l'utilisateur via la console pour recueilli
      cd producer
      go run producerClient.go
 
-### 2. Client basé sur une API(Producer2.go)
-
-Ce type de producteur est exposé via une API et accepte des données via une requête POST. Le point de terminaison de l'API est `localhost:3001/api/v1/server1`, et le client attend un format JSON spécifique dans le corps de la requête.
-
-#### Point de Terminaison de l'API
-
-- **Méthode :** POST
-- **Point de terminaison :** `localhost:3001/api/v1/server1`
-
-#### Utilisation
-
-- Ouvrez une autre nouvelle fenêtre de terminal ou un autre onglet.
-
-   - Accédez au répertoire "producer" de ce projet.
-
-   - Exécutez la commande suivante pour démarrer le client producteur :
-     
-     ```bash
-     cd producer
-     go run producer2.go
-
-#### Format du Corps de la Requête
-
-```json
-{
-  "text": "data dans le message",
-  "id": "ID du client",
-  "num-inc": "numero d'instance"
-}
-
-## FINALEMENT 
-4. **Écrivez les messages que vous souhaitez envoyer.**
-
+## Messages : On a principalement 2 Types de message échangés
+### 1. StoreReqMsg
+Le type de message envoyé par un client à tous les serveurs , destiné à être reçu par tous les serveurs.
+Ce type message contient les champs suivants :
+#### Data : le contenu utile est une chaîne de caractères quelconque.
+#### CID : numéro d’instance chiffre (c’est l’ID du client expéditeur)
+#### SrNb : Un chiffre arbitraire et distinct est associé à chaque StoreReq
+#### HighPriority : Un drapeau représentant la priorité du message est réglé sur "true" s'il est important, et sur "false" sinon.
+#### SigC : Signature du client
+### 2. AckStoreMsg
+Le type de message créé par un serveur lorsqu'il reçoit un StoreReqMsg.
+Ce type message contient les champs suivants :
+#### Data : le contenu utile est une chaîne de caractères quelconque.
+#### CinitID : numéro d’instance chiffre (c’est l’ID du client initiateur)
+#### SrNb : Un chiffre arbitraire et distinct est associé à chaque StoreReq
+#### IdList : liste des ids messages recus.
+#### SID : L'ID du serveur expéditeur.
+#### SigCinit : signature du client initiateur = 0 (pour l’instant).
+#### SigServ : signature du serveur expéditeur  = 0 (pour l’instant).
+## Méthodes :
+### 1. initializeSenderForMessages
+Cette fonction est utilisée pour configurer les paramètres de Kafka afin de spécifier le serveur à utiliser comme envoyeur de messages, ainsi que d'autres paramètres de configuration nécessaires pour l'envoi efficace de messages via Kafka.
+### 2. initializeListenerForMessages
+Cette fonction est utilisée pour configurer les paramètres de Kafka afin de spécifier le serveur à utiliser comme récepteur de messages, ainsi que d'autres paramètres de configuration nécessaires pour la réception efficace de messages via Kafka.
+### 3. initializekafkaServer
+une fonction qui permet d'initialiser les paramètres du serveur Kafka, tels que l'URL du courtier Kafka et les sujets (topics).
+### 4. handleRecieveMessages
+Une fonction utilisé pour écouter et gérer les différents messages reçus, que ce soit ceux du client vers le serveur ou entre serveurs.
 C'est tout ! Vous avez maintenant exécuté avec succès ce projet Go avec Docker. N'hésitez pas à ajouter d'autres instructions ou informations pertinentes à ce README en fonction des besoins de votre projet.
+### 5. SendToClient
+envoie un message kafka au client n° cID
+### 6.SendToAllServers
+envoie un message kakfka à tous les serveurs
+### 7.CreateStoreCertif
+en gros cette fonction vérifie que tous les messages ont le même data, puis output la concaténation des sigServ
+### 8.checkForMsgId
+Cette fonction sert à vérifier si l'identifiant du message reçu existe déjà ou non.
+### 9.HandleStoreReqMsg
+fonction exécutée par un serveur lorsqu’il reçoit un message de type StoreReqMsg 
+### 10.getDistinctServersNumber 
+Fonction renvoyant le nombre de serveurs différents à partir desquels des messages ont été reçus.
+### 11.HandleAckStoreMsg
+Lorsqu'un serveur reçoit un message AckStoreMsg, cette fonction est exécutée pour traiter les messages
 
+Les détails supplémentaires sur les fonctions sont inclus dans le code lui-même.
 Bonne utilisation !
 

@@ -9,43 +9,42 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-var messagesReferenceList = map[string]map[string]AckStoreMsg{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
-var serversList = map[string]map[string]map[string]string{}     /// la liste des serveurs
-const UrlKafka = "127.0.0.1:9092"                               // l'url du serveur kafka
-const s = 2                                                     // represente le variable s qui est egale à N/2 :
-var storeResMessagesList = map[string]map[int]StoreReqMsg{}
-var topicsClients = map[string]string{} //List des correspondence topic kafka/ID client pour les clients
-var message = make(map[int]AckStoreMsg) // Initalisation du message
-
-const t = 2
-const n = t*2 + 1          //N serveurs
-const serverId = "server1" // ID du serveur
-
-var AckStoreMessagesList = map[string]map[int]AckStoreMsg{}
-
 // structure StoreCertif
 type Cert struct {
-	QuorumSigs map[string]string //liste à un élément: la paire (amsg.sID , amsg.sigServ )
-	CinitID1   string            //Id du premier client initiateur
+	QuorumSigs map[string]string // liste à un élément: la paire (message.sID , message.sigServ )
+	CinitID1   string            // Id du premier client initiateur
 	SrNb       string            // numéro d’instance = chiffre arbitraire
 }
-type StoreReqMsg struct { //envoyé par un client à tous les serveurs
+type StoreReqMsg struct { //type de message envoyé par un client à tous les serveurs
 	Data         string `form:"text" json:"text"`                   //contenu utile chaîne de caractères arbitraire
 	CID          string `form:"id" json:"id"`                       //  numéro d’instance chiffre entre 1 et L (c’est l’ID du client expéditeur)
 	SrNb         string `form:"num-inc" json:"num-inc"`             //chiffre arbitraire, distinct pour chaque StoreReq
 	HighPriority bool   `form:"high_priority" json:"high_priority"` // flag  false par défaut, true sinon
 	SigC         string `form:"sigc" json:"sigc"`                   // signature du client
 }
-type AckStoreMsg struct { //créé par un serveur lorsqu’il reçoit un StoreReqMsg
+type AckStoreMsg struct { //type de message créé par un serveur lorsqu’il reçoit un StoreReqMsg
 	Data     string            `form:"text" json:"text"`
 	SrNb     string            `form:"num-inc" json:"num-inc"`   // numéro d’instance = chiffre arbitraire
 	CinitID  string            `form:"cinitID" json:"cinitID"`   //chiffre entre 1 et L (c’est l’ID du client initiateur)
 	IdList   map[string]string `form:"idList" json:"idList"`     // liste des id messages recus
-	SID      string            `form:"serverId" json:"serverId"` // client initiateur chiffre entre 1 et N (c’est l’ID du serveur expéditeur)
+	SID      string            `form:"serverId" json:"serverId"` // id su serveur chiffre entre 1 et N (c’est l’ID du serveur expéditeur)
 	SigCinit string            `form:"sigCinit" json:"sigCinit"` //signature du client initiateur = 0 (pour l’instant)
 	SigServ  string            `form:"sigServ" json:"sigServ"`   // signature de l’expéditeur  = 0 (pour l’instant)
 
 }
+
+var messagesReferenceList = map[string]map[string]AckStoreMsg{} // la liste des message recu par le serveur et envoyée par des clients , regroupées par numero d'instance , sans redondance
+var serversList = map[string]map[string]map[string]string{}     /// la liste des serveurs
+const UrlKafka = "127.0.0.1:9092"                               // l'url du serveur kafka
+const t = 2
+const n = t*2 + 1          //N serveurs
+const s = 2                // represente le variable s qui est egale à N/2 :
+const serverId = "server1" // ID du serveur
+
+var AckStoreMessagesList = map[string]map[int]AckStoreMsg{}
+var storeResMessagesList = map[string]map[int]StoreReqMsg{}
+var topicsClients = map[string]string{} //List des correspondence sujet sur kafka/ID client pour les clients
+var message = make(map[int]AckStoreMsg) // Initalisation du message
 
 // fonction pour intialiser les paramteres du serveur en tant que producteur des messages(envoyer des messages)
 func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, error) {
@@ -61,13 +60,6 @@ func initializeSenderForMessages(brokersUrl []string) (sarama.SyncProducer, erro
 	}
 
 	return conn, nil
-}
-
-// fonction main
-func main() {
-	topicsClients["client1"] = "client1"
-	initializekafkaServer()
-
 }
 
 // fonction pour intialiser les paramteres du serveur en tant que consommateur des messages(ecouter des messages recus)
@@ -107,7 +99,7 @@ func initializekafkaServer() {
 	handleRecieveMessages(toServerConsumer, serverToAllServersConsumer, clientToAllServersConsumer, worker)
 }
 
-// fonction pour ecouter les differents messages recu (client to server/ server to server)
+// fonction pour ecouter et gérer les differents messages recu (client to server/ server to server)
 func handleRecieveMessages(toServerConsumer sarama.PartitionConsumer, serverToAllServersConsumer sarama.PartitionConsumer, clientToAllServersConsumer sarama.PartitionConsumer, worker sarama.Consumer) {
 	sigchan := make(chan os.Signal, 1)
 
@@ -119,7 +111,7 @@ func handleRecieveMessages(toServerConsumer sarama.PartitionConsumer, serverToAl
 			select {
 			case err := <-toServerConsumer.Errors():
 				fmt.Println(err)
-			case receivedMessageToServer := <-toServerConsumer.Messages(): // cas ou le serveur recoit un message destinée qu'a lui
+			case receivedMessageToServer := <-toServerConsumer.Messages(): // cas ou le serveur recoit un message destinée qu'a lui à partir d'un client
 
 				if receivedMessageToServer.Value != nil { // si son valeur est different de null
 					content := StoreReqMsg{}
@@ -169,6 +161,53 @@ func handleRecieveMessages(toServerConsumer sarama.PartitionConsumer, serverToAl
 
 }
 
+// envoie msg au client n° cID
+func SendToClient(ackMsg []byte, cID string) error {
+	brokersUrl := []string{UrlKafka}
+	var topic = topicsClients[cID]
+	producer, err := initializeSenderForMessages(brokersUrl)
+	if err != nil {
+		return err
+	}
+
+	defer producer.Close()
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.StringEncoder(ackMsg),
+	}
+	partition, offset, err := producer.SendMessage(msg)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", topic, partition, offset)
+	return nil
+}
+
+// envoie msg à tous les serveurs
+func SendToAllServers(message []byte) error {
+	var topic = "servers"
+	brokersUrl := []string{UrlKafka}
+	producer, err := initializeSenderForMessages(brokersUrl)
+	if err != nil {
+		return err
+	}
+
+	defer producer.Close()
+
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.StringEncoder(message),
+	}
+
+	partition, offset, err := producer.SendMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", topic, partition, offset)
+
+	return nil
+}
 func CreateStoreCertif(list map[string]map[int]AckStoreMsg) Cert { // utilisé par un serveur lorsqu’il a reçu t+1  AckStoreMsg du même ID :
 	// en gros cette fonction vérifie que tous les messages ont le même data, puis output la concaténation des sigServ
 	var i = 1
@@ -200,26 +239,16 @@ func CreateStoreCertif(list map[string]map[int]AckStoreMsg) Cert { // utilisé p
 	return output //output (cinitID1, srNb, quorumSigs )
 }
 
-// envoie msg au client n° cID
-func SendToClient(ackMsg []byte, cID string) error {
-	brokersUrl := []string{UrlKafka}
-	var topic = topicsClients[cID]
-	producer, err := initializeSenderForMessages(brokersUrl)
-	if err != nil {
-		return err
-	}
+// sert à verifier si id msg recu exite déja ou non
+func checkForMsgId(msg StoreReqMsg, m map[int]StoreReqMsg) bool {
+	var isPresent = false
+	for _, message := range m {
+		if msg.CID == message.CID {
+			isPresent = true
+		}
 
-	defer producer.Close()
-	msg := &sarama.ProducerMessage{
-		Topic: topic,
-		Value: sarama.StringEncoder(ackMsg),
 	}
-	partition, offset, err := producer.SendMessage(msg)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", topic, partition, offset)
-	return nil
+	return isPresent
 }
 
 // fonction exécutée par un serveur lorsqu’il reçoit un StoreReqMsg msg
@@ -243,16 +272,19 @@ func HandleStoreReqMsg(msg StoreReqMsg) {
 
 }
 
-// sert à verifier si id msg recu exite déja ou non
-func checkForMsgId(msg StoreReqMsg, m map[int]StoreReqMsg) bool {
-	var isPresent = false
+// fonctin pour retourner le nombre de serveur distincts
+func getDistinctServersNumber(m map[string]AckStoreMsg) int {
+	var serversList = map[string]string{}
+	var i = 0
 	for _, message := range m {
-		if msg.CID == message.CID {
-			isPresent = true
-		}
+		_, exist := serversList[message.SID]
+		if !exist {
+			i = i + 1
+			serversList[message.SID] = message.SID
 
+		}
 	}
-	return isPresent
+	return i
 }
 
 // fonction exécutée par un serveur lorsqu’il reçoit un AckStoreMsg
@@ -285,43 +317,9 @@ func HandleAckStoreMsg(msg AckStoreMsg) {
 	}
 }
 
-// fonctin pour retourner le nombre de serveur distincts
-func getDistinctServersNumber(m map[string]AckStoreMsg) int {
-	var serversList = map[string]string{}
-	var i = 0
-	for _, message := range m {
-		_, exist := serversList[message.SID]
-		if !exist {
-			i = i + 1
-			serversList[message.SID] = message.SID
+// fonction main
+func main() {
+	topicsClients["client1"] = "client1"
+	initializekafkaServer()
 
-		}
-	}
-	return i
-}
-
-// envoie msg à tous les serveurs
-func SendToAllServers(message []byte) error {
-	var topic = "servers"
-	brokersUrl := []string{UrlKafka}
-	producer, err := initializeSenderForMessages(brokersUrl)
-	if err != nil {
-		return err
-	}
-
-	defer producer.Close()
-
-	msg := &sarama.ProducerMessage{
-		Topic: topic,
-		Value: sarama.StringEncoder(message),
-	}
-
-	partition, offset, err := producer.SendMessage(msg)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", topic, partition, offset)
-
-	return nil
 }
